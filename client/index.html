@@ -126,6 +126,7 @@ const audio = new Audio();
 audio.preload = 'auto';
 let song = JSON.parse(localStorage.getItem('serenade_song') || 'null');
 let playlist = [];
+let queue = [];
 let history = [];
 let playing = false;
 let ready = false;
@@ -187,7 +188,7 @@ function loadSong(s, autoplay) {
 }
 
 function onSongEnd() {
-  if (playlist.length > 0) { loadSong(playlist.shift(), true); renderPlaylist(); }
+  if (queue.length > 0) { loadSong(queue.shift(), true); renderPlaylist(); }
   else if (roaming && song?.songId) fetchSimilar(song.songId);
 }
 
@@ -202,7 +203,7 @@ function fetchSimilar(id) {
 
 function togglePlay() { if (!song||!ready) return; if (playing) { audio.pause(); playing=false; } else { audio.play().catch(()=>{}); playing=true; } updateUI(); }
 function toggleRoam() { roaming=!roaming; localStorage.setItem('serenade_roam', JSON.stringify(roaming)); updateUI(); }
-function playNext() { if (playlist.length>0) { loadSong(playlist.shift(), true); renderPlaylist(); } else if (roaming&&song?.songId) fetchSimilar(song.songId); }
+function playNext() { if (queue.length>0) { loadSong(queue.shift(), true); renderPlaylist(); } else if (roaming&&song?.songId) fetchSimilar(song.songId); }
 function playPrev() { if (history.length>0) { if (song) playlist.unshift(song); const prev=history.pop(); song=null; loadSong(prev, true); history.pop(); renderPlaylist(); } }
 
 // Tabs
@@ -218,10 +219,16 @@ function showTab(name) {
 function fetchPlaylist() {
   fetch('/api/playlist').then(r=>r.json()).then(d => { if (d.ok) { playlist=d.songs.map(s=>({name:s.name,artist:s.artist,album:s.album,cover:s.cover,songId:s.songId,addedBy:s.addedBy})); renderPlaylist(); } }).catch(()=>{});
 }
+function playFromPlaylist(idx) {
+  const rest = playlist.slice(idx + 1);
+  loadSong(playlist[idx], true);
+  queue = rest.map(s => ({...s}));
+  renderPlaylist();
+}
 function renderPlaylist() {
   const el = document.getElementById('playlistList');
   if (playlist.length===0) { el.innerHTML='<div class="pl-empty">Empty playlist. Search and add songs.</div>'; return; }
-  el.innerHTML = playlist.map((s,i) => `<div class="pl-item ${song?.songId===s.songId?'active':''}" onclick="loadSong(playlist[${i}],true);renderPlaylist()"><div class="pl-num">${i+1}</div><img class="pl-cover" src="${s.cover}" alt=""><div class="pl-info"><div class="pl-name">${s.name}</div><div class="pl-artist">${s.artist}</div></div></div>`).join('');
+  el.innerHTML = playlist.map((s,i) => `<div class="pl-item ${song?.songId===s.songId?'active':''}" onclick="playFromPlaylist(${i})"><div class="pl-num">${i+1}</div><img class="pl-cover" src="${s.cover}" alt=""><div class="pl-info"><div class="pl-name">${s.name}</div><div class="pl-artist">${s.artist}</div></div></div>`).join('');
 }
 
 // Search
