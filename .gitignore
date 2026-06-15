@@ -1,0 +1,6 @@
+server/.netease_cred
+server/cache/
+server/remote.json
+__pycache__/
+*.pyc
+.DS_Store

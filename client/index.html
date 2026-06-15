@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Serenade</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #0d0d0d; color: #e8e0d6; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+.player { width: 340px; background: rgba(30, 26, 22, 0.95); border-radius: 16px; overflow: hidden; box-shadow: 0 8px 32px rgba(0,0,0,0.5); }
+.cover-wrap { position: relative; width: 100%; aspect-ratio: 1; background: #1a1714; }
+.cover-wrap img { width: 100%; height: 100%; object-fit: cover; }
+.cover-empty { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; font-size: 64px; opacity: 0.2; }
+.info { padding: 16px 20px 8px; }
+.song-name { font-size: 16px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.song-artist { font-size: 12px; color: #a09080; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.progress { margin: 12px 20px 0; height: 3px; background: rgba(255,255,255,0.08); border-radius: 2px; cursor: pointer; }
+.progress-fill { height: 100%; background: #e0a870; border-radius: 2px; transition: width 0.3s linear; width: 0%; }
+.controls { display: flex; align-items: center; justify-content: center; gap: 24px; padding: 16px; }
+.play-btn { width: 48px; height: 48px; border-radius: 50%; background: #e0a870; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: transform 0.15s; }
+.play-btn:active { transform: scale(0.93); }
+.play-btn svg { color: #1a1714; }
+.play-btn.loading { opacity: 0.5; }
+.skip-btn { opacity: 0.3; cursor: default; }
+.search-btn { display: block; width: calc(100% - 40px); margin: 0 20px 16px; padding: 10px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; color: #a09080; font-size: 13px; text-align: center; cursor: pointer; transition: background 0.2s; }
+.search-btn:hover { background: rgba(255,255,255,0.1); }
+
+/* Search overlay */
+.search-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 10; flex-direction: column; align-items: center; padding: 40px 20px; }
+.search-overlay.open { display: flex; }
+.search-bar { display: flex; gap: 8px; width: 100%; max-width: 340px; }
+.search-bar input { flex: 1; padding: 10px 14px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; color: #e8e0d6; font-size: 14px; outline: none; }
+.search-bar button { padding: 10px 18px; background: #e0a870; color: #1a1714; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
+.search-close { position: absolute; top: 12px; right: 16px; color: #a09080; font-size: 24px; cursor: pointer; background: none; border: none; }
+.results { width: 100%; max-width: 340px; margin-top: 16px; overflow-y: auto; flex: 1; }
+.result-item { display: flex; align-items: center; gap: 12px; padding: 10px; border-radius: 8px; cursor: pointer; transition: background 0.2s; }
+.result-item:hover { background: rgba(255,255,255,0.06); }
+.result-cover { width: 44px; height: 44px; border-radius: 6px; object-fit: cover; flex-shrink: 0; background: #1a1714; }
+.result-info { min-width: 0; }
+.result-name { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.result-artist { font-size: 11px; color: #a09080; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+</style>
+</head>
+<body>
+
+<div class="player">
+  <div class="cover-wrap" id="coverWrap">
+    <div class="cover-empty" id="coverEmpty">&#9835;</div>
+    <img id="coverImg" src="" alt="" style="display:none">
+  </div>
+  <div class="info">
+    <div class="song-name" id="songName">Serenade</div>
+    <div class="song-artist" id="songArtist">tap below to search</div>
+  </div>
+  <div class="progress" id="progressBar">
+    <div class="progress-fill" id="progressFill"></div>
+  </div>
+  <div class="controls">
+    <svg class="skip-btn" viewBox="0 0 20 20" width="16" height="16"><path d="M18,10 L6,2 L6,18Z" fill="currentColor" transform="scale(-1,1) translate(-20,0)"/></svg>
+    <div class="play-btn" id="playBtn" onclick="togglePlay()">
+      <svg id="playIcon" viewBox="0 0 24 24" width="24" height="24"><polygon points="6,2 22,12 6,22" fill="currentColor"/></svg>
+      <svg id="pauseIcon" viewBox="0 0 24 24" width="24" height="24" style="display:none"><rect x="5" y="3" width="5" height="18" rx="1" fill="currentColor"/><rect x="14" y="3" width="5" height="18" rx="1" fill="currentColor"/></svg>
+    </div>
+    <svg class="skip-btn" viewBox="0 0 20 20" width="16" height="16"><path d="M2,10 L14,2 L14,18Z" fill="currentColor" transform="scale(-1,1) translate(-20,0)"/></svg>
+  </div>
+  <div class="search-btn" onclick="openSearch()">Search songs</div>
+</div>
+
+<div class="search-overlay" id="searchOverlay">
+  <button class="search-close" onclick="closeSearch()">&times;</button>
+  <div class="search-bar">
+    <input id="searchInput" placeholder="song or artist..." onkeydown="if(event.key==='Enter')doSearch()">
+    <button onclick="doSearch()" id="searchBtn">Go</button>
+  </div>
+  <div class="results" id="results"></div>
+</div>
+
+<script>
+const audio = new Audio();
+audio.preload = 'auto';
+let song = JSON.parse(localStorage.getItem('serenade_song') || 'null');
+let playing = false;
+let ready = false;
+
+audio.addEventListener('timeupdate', () => {
+  if (audio.duration) {
+    document.getElementById('progressFill').style.width = (audio.currentTime / audio.duration * 100) + '%';
+  }
+});
+audio.addEventListener('ended', () => { playing = false; updateUI(); });
+audio.addEventListener('canplay', () => { ready = true; updateUI(); });
+
+function updateUI() {
+  document.getElementById('playIcon').style.display = playing ? 'none' : '';
+  document.getElementById('pauseIcon').style.display = playing ? '' : 'none';
+  document.getElementById('playBtn').classList.toggle('loading', !ready && song);
+  if (song) {
+    document.getElementById('songName').textContent = song.name;
+    document.getElementById('songArtist').textContent = song.artist;
+    if (song.cover) {
+      document.getElementById('coverImg').src = song.cover;
+      document.getElementById('coverImg').style.display = '';
+      document.getElementById('coverEmpty').style.display = 'none';
+    }
+  }
+}
+
+function loadSong(s) {
+  song = s;
+  localStorage.setItem('serenade_song', JSON.stringify(s));
+  ready = false;
+  updateUI();
+  if (s.songId) {
+    fetch('/api/url?id=' + s.songId)
+      .then(r => r.json())
+      .then(d => {
+        if (d.ok && d.url) {
+          audio.src = d.url;
+          audio.load();
+        }
+      });
+  }
+}
+
+function togglePlay() {
+  if (!song || !ready) return;
+  if (playing) {
+    audio.pause();
+    playing = false;
+  } else {
+    audio.play().catch(() => {});
+    playing = true;
+  }
+  updateUI();
+}
+
+function openSearch() {
+  document.getElementById('searchOverlay').classList.add('open');
+  setTimeout(() => document.getElementById('searchInput').focus(), 100);
+}
+function closeSearch() {
+  document.getElementById('searchOverlay').classList.remove('open');
+  document.getElementById('results').innerHTML = '';
+  document.getElementById('searchInput').value = '';
+}
+
+function doSearch() {
+  const q = document.getElementById('searchInput').value.trim();
+  if (!q) return;
+  document.getElementById('searchBtn').textContent = '...';
+  fetch('/api/search?q=' + encodeURIComponent(q))
+    .then(r => r.json())
+    .then(d => {
+      document.getElementById('searchBtn').textContent = 'Go';
+      const el = document.getElementById('results');
+      el.innerHTML = '';
+      (d.songs || []).forEach(s => {
+        const div = document.createElement('div');
+        div.className = 'result-item';
+        div.innerHTML = `<img class="result-cover" src="${s.cover}" alt=""><div class="result-info"><div class="result-name">${s.name}</div><div class="result-artist">${s.artist}</div></div>`;
+        div.onclick = () => { loadSong({ name: s.name, artist: s.artist, album: s.album, cover: s.cover, songId: s.id }); closeSearch(); };
+        el.appendChild(div);
+      });
+    })
+    .catch(() => { document.getElementById('searchBtn').textContent = 'Go'; });
+}
+
+// Remote play polling
+setInterval(() => {
+  fetch('/api/remote').then(r => r.json()).then(d => {
+    if (d.ok && d.song) {
+      loadSong(d.song);
+      audio.addEventListener('canplay', () => { audio.play().catch(() => {}); playing = true; updateUI(); }, { once: true });
+    }
+  }).catch(() => {});
+}, 3000);
+
+// Init
+if (song) {
+  updateUI();
+  if (song.songId) {
+    fetch('/api/url?id=' + song.songId)
+      .then(r => r.json())
+      .then(d => { if (d.ok && d.url) { audio.src = d.url; audio.load(); } });
+  }
+}
+</script>
+</body>
+</html>
