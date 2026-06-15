@@ -79,6 +79,8 @@ class Handler(SimpleHTTPRequestHandler):
             return self._get_url()
         if path == "/api/remote":
             return self._remote_get()
+        if path == "/api/similar":
+            return self._similar()
         if path.startswith("/api/file/"):
             return self._serve_cached(path)
 
@@ -176,6 +178,34 @@ class Handler(SimpleHTTPRequestHandler):
                 fallback = re.sub(r"m\d+\.music\.126\.net", CDN_FALLBACK, audio_url)
                 _download(fallback)
             self._json(200, {"ok": True, "url": f"/api/file/{song_id}.mp3"})
+        except Exception as e:
+            self._json(500, {"ok": False, "error": str(e)})
+
+    def _similar(self):
+        qs = parse_qs(urlparse(self.path).query)
+        song_id = qs.get("id", [""])[0]
+        if not song_id:
+            return self._json(400, {"error": "missing id"})
+        try:
+            raw = _netease_req(
+                f"https://music.163.com/api/discovery/simiSong?songid={song_id}&offset=0&total=true&limit=6"
+            )
+            raw_songs = raw.get("songs", [])[:6]
+            songs = []
+            for s in raw_songs:
+                artists = ", ".join(a.get("name", "") for a in s.get("artists", []))
+                album = s.get("album", {}) or {}
+                cover = album.get("picUrl", "") or ""
+                if cover and not cover.startswith("http"):
+                    cover = "https:" + cover
+                songs.append({
+                    "id": s.get("id"),
+                    "name": s.get("name", ""),
+                    "artist": artists,
+                    "album": album.get("name", ""),
+                    "cover": cover,
+                })
+            self._json(200, {"ok": True, "songs": songs})
         except Exception as e:
             self._json(500, {"ok": False, "error": str(e)})
 

@@ -17,13 +17,18 @@ body { background: #0d0d0d; color: #e8e0d6; font-family: -apple-system, BlinkMac
 .progress { margin: 12px 20px 0; height: 3px; background: rgba(255,255,255,0.08); border-radius: 2px; cursor: pointer; }
 .progress-fill { height: 100%; background: #e0a870; border-radius: 2px; transition: width 0.3s linear; width: 0%; }
 .controls { display: flex; align-items: center; justify-content: center; gap: 24px; padding: 16px; }
+.ctrl-btn { background: none; border: none; color: #e8e0d6; cursor: pointer; opacity: 0.5; transition: opacity 0.2s; padding: 4px; }
+.ctrl-btn:hover, .ctrl-btn.active { opacity: 1; }
+.ctrl-btn.has-queue { opacity: 0.8; color: #e0a870; }
 .play-btn { width: 48px; height: 48px; border-radius: 50%; background: #e0a870; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: transform 0.15s; }
 .play-btn:active { transform: scale(0.93); }
 .play-btn svg { color: #1a1714; }
 .play-btn.loading { opacity: 0.5; }
-.skip-btn { opacity: 0.3; cursor: default; }
-.search-btn { display: block; width: calc(100% - 40px); margin: 0 20px 16px; padding: 10px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; color: #a09080; font-size: 13px; text-align: center; cursor: pointer; transition: background 0.2s; }
-.search-btn:hover { background: rgba(255,255,255,0.1); }
+.bottom-row { display: flex; gap: 8px; padding: 0 20px 16px; }
+.bottom-btn { flex: 1; padding: 10px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; color: #a09080; font-size: 13px; text-align: center; cursor: pointer; transition: background 0.2s; }
+.bottom-btn:hover { background: rgba(255,255,255,0.1); }
+.bottom-btn.roam-on { background: rgba(224,168,112,0.15); border-color: rgba(224,168,112,0.3); color: #e0a870; }
+.queue-badge { font-size: 11px; color: #e0a870; margin-left: 4px; }
 
 /* Search overlay */
 .search-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 10; flex-direction: column; align-items: center; padding: 40px 20px; }
@@ -36,9 +41,24 @@ body { background: #0d0d0d; color: #e8e0d6; font-family: -apple-system, BlinkMac
 .result-item { display: flex; align-items: center; gap: 12px; padding: 10px; border-radius: 8px; cursor: pointer; transition: background 0.2s; }
 .result-item:hover { background: rgba(255,255,255,0.06); }
 .result-cover { width: 44px; height: 44px; border-radius: 6px; object-fit: cover; flex-shrink: 0; background: #1a1714; }
-.result-info { min-width: 0; }
+.result-info { min-width: 0; flex: 1; }
 .result-name { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .result-artist { font-size: 11px; color: #a09080; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.result-add { background: none; border: 1px solid rgba(255,255,255,0.15); color: #a09080; border-radius: 6px; padding: 4px 10px; font-size: 11px; cursor: pointer; flex-shrink: 0; transition: all 0.2s; }
+.result-add:hover { border-color: #e0a870; color: #e0a870; }
+.result-add.added { border-color: rgba(224,168,112,0.3); color: #e0a870; opacity: 0.5; pointer-events: none; }
+
+/* Queue overlay */
+.queue-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 10; flex-direction: column; align-items: center; padding: 40px 20px; }
+.queue-overlay.open { display: flex; }
+.queue-title { color: #a09080; font-size: 14px; margin-bottom: 12px; width: 100%; max-width: 340px; }
+.queue-list { width: 100%; max-width: 340px; overflow-y: auto; flex: 1; }
+.queue-item { display: flex; align-items: center; gap: 12px; padding: 10px; border-radius: 8px; }
+.queue-item .result-info { cursor: pointer; }
+.queue-item .result-info:hover .result-name { color: #e0a870; }
+.queue-rm { background: none; border: none; color: #a09080; font-size: 18px; cursor: pointer; padding: 0 4px; opacity: 0.5; }
+.queue-rm:hover { opacity: 1; color: #e07070; }
+.queue-empty { color: #a09080; font-size: 13px; opacity: 0.5; text-align: center; margin-top: 40px; }
 </style>
 </head>
 <body>
@@ -56,14 +76,22 @@ body { background: #0d0d0d; color: #e8e0d6; font-family: -apple-system, BlinkMac
     <div class="progress-fill" id="progressFill"></div>
   </div>
   <div class="controls">
-    <svg class="skip-btn" viewBox="0 0 20 20" width="16" height="16"><path d="M18,10 L6,2 L6,18Z" fill="currentColor" transform="scale(-1,1) translate(-20,0)"/></svg>
+    <button class="ctrl-btn" id="prevBtn" onclick="playPrev()" title="Previous">
+      <svg viewBox="0 0 24 24" width="20" height="20"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z" fill="currentColor" transform="scale(-1,1) translate(-24,0)"/></svg>
+    </button>
     <div class="play-btn" id="playBtn" onclick="togglePlay()">
       <svg id="playIcon" viewBox="0 0 24 24" width="24" height="24"><polygon points="6,2 22,12 6,22" fill="currentColor"/></svg>
       <svg id="pauseIcon" viewBox="0 0 24 24" width="24" height="24" style="display:none"><rect x="5" y="3" width="5" height="18" rx="1" fill="currentColor"/><rect x="14" y="3" width="5" height="18" rx="1" fill="currentColor"/></svg>
     </div>
-    <svg class="skip-btn" viewBox="0 0 20 20" width="16" height="16"><path d="M2,10 L14,2 L14,18Z" fill="currentColor" transform="scale(-1,1) translate(-20,0)"/></svg>
+    <button class="ctrl-btn" id="nextBtn" onclick="playNext()" title="Next">
+      <svg viewBox="0 0 24 24" width="20" height="20"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z" fill="currentColor"/></svg>
+    </button>
   </div>
-  <div class="search-btn" onclick="openSearch()">Search songs</div>
+  <div class="bottom-row">
+    <div class="bottom-btn" onclick="openSearch()">Search</div>
+    <div class="bottom-btn" id="queueBtn" onclick="openQueue()">Queue<span class="queue-badge" id="queueBadge"></span></div>
+    <div class="bottom-btn" id="roamBtn" onclick="toggleRoam()">Roam</div>
+  </div>
 </div>
 
 <div class="search-overlay" id="searchOverlay">
@@ -75,25 +103,43 @@ body { background: #0d0d0d; color: #e8e0d6; font-family: -apple-system, BlinkMac
   <div class="results" id="results"></div>
 </div>
 
+<div class="queue-overlay" id="queueOverlay">
+  <button class="search-close" onclick="closeQueue()">&times;</button>
+  <div class="queue-title">Up next</div>
+  <div class="queue-list" id="queueList"></div>
+</div>
+
 <script>
 const audio = new Audio();
 audio.preload = 'auto';
 let song = JSON.parse(localStorage.getItem('serenade_song') || 'null');
+let queue = JSON.parse(localStorage.getItem('serenade_queue') || '[]');
+let history = [];
 let playing = false;
 let ready = false;
+let roaming = JSON.parse(localStorage.getItem('serenade_roam') || 'false');
 
 audio.addEventListener('timeupdate', () => {
   if (audio.duration) {
     document.getElementById('progressFill').style.width = (audio.currentTime / audio.duration * 100) + '%';
   }
 });
-audio.addEventListener('ended', () => { playing = false; updateUI(); });
+audio.addEventListener('ended', () => { playing = false; updateUI(); onSongEnd(); });
 audio.addEventListener('canplay', () => { ready = true; updateUI(); });
+
+function saveQueue() {
+  localStorage.setItem('serenade_queue', JSON.stringify(queue));
+}
 
 function updateUI() {
   document.getElementById('playIcon').style.display = playing ? 'none' : '';
   document.getElementById('pauseIcon').style.display = playing ? '' : 'none';
-  document.getElementById('playBtn').classList.toggle('loading', !ready && song);
+  document.getElementById('playBtn').classList.toggle('loading', !ready && !!song);
+  document.getElementById('prevBtn').classList.toggle('active', history.length > 0);
+  document.getElementById('nextBtn').classList.toggle('active', queue.length > 0 || roaming);
+  document.getElementById('nextBtn').classList.toggle('has-queue', queue.length > 0);
+  document.getElementById('queueBadge').textContent = queue.length > 0 ? queue.length : '';
+  document.getElementById('roamBtn').classList.toggle('roam-on', roaming);
   if (song) {
     document.getElementById('songName').textContent = song.name;
     document.getElementById('songArtist').textContent = song.artist;
@@ -105,10 +151,13 @@ function updateUI() {
   }
 }
 
-function loadSong(s) {
+function loadSong(s, autoplay) {
+  if (song) history.push(song);
+  if (history.length > 50) history.shift();
   song = s;
   localStorage.setItem('serenade_song', JSON.stringify(s));
   ready = false;
+  document.getElementById('progressFill').style.width = '0%';
   updateUI();
   if (s.songId) {
     fetch('/api/url?id=' + s.songId)
@@ -117,23 +166,77 @@ function loadSong(s) {
         if (d.ok && d.url) {
           audio.src = d.url;
           audio.load();
+          if (autoplay) {
+            audio.addEventListener('canplay', () => { audio.play().catch(() => {}); playing = true; updateUI(); }, { once: true });
+          }
         }
       });
   }
 }
 
+function onSongEnd() {
+  if (queue.length > 0) {
+    const next = queue.shift();
+    saveQueue();
+    loadSong(next, true);
+  } else if (roaming && song && song.songId) {
+    fetchSimilarAndPlay(song.songId);
+  }
+}
+
+function fetchSimilarAndPlay(songId) {
+  document.getElementById('songArtist').textContent = 'finding similar...';
+  fetch('/api/similar?id=' + songId)
+    .then(r => r.json())
+    .then(d => {
+      if (d.ok && d.songs && d.songs.length > 0) {
+        const pick = d.songs[Math.floor(Math.random() * d.songs.length)];
+        loadSong({ name: pick.name, artist: pick.artist, album: pick.album, cover: pick.cover, songId: pick.id }, true);
+      }
+    })
+    .catch(() => {});
+}
+
+function playNext() {
+  if (queue.length > 0) {
+    const next = queue.shift();
+    saveQueue();
+    loadSong(next, true);
+  } else if (roaming && song && song.songId) {
+    fetchSimilarAndPlay(song.songId);
+  }
+}
+
+function playPrev() {
+  if (history.length > 0) {
+    if (song) queue.unshift(song);
+    const prev = history.pop();
+    song = null;
+    loadSong(prev, true);
+    history.pop();
+  }
+}
+
 function togglePlay() {
   if (!song || !ready) return;
-  if (playing) {
-    audio.pause();
-    playing = false;
-  } else {
-    audio.play().catch(() => {});
-    playing = true;
-  }
+  if (playing) { audio.pause(); playing = false; }
+  else { audio.play().catch(() => {}); playing = true; }
   updateUI();
 }
 
+function toggleRoam() {
+  roaming = !roaming;
+  localStorage.setItem('serenade_roam', JSON.stringify(roaming));
+  updateUI();
+}
+
+function addToQueue(s) {
+  queue.push(s);
+  saveQueue();
+  updateUI();
+}
+
+// Search
 function openSearch() {
   document.getElementById('searchOverlay').classList.add('open');
   setTimeout(() => document.getElementById('searchInput').focus(), 100);
@@ -155,34 +258,73 @@ function doSearch() {
       const el = document.getElementById('results');
       el.innerHTML = '';
       (d.songs || []).forEach(s => {
+        const songObj = { name: s.name, artist: s.artist, album: s.album, cover: s.cover, songId: s.id };
         const div = document.createElement('div');
         div.className = 'result-item';
-        div.innerHTML = `<img class="result-cover" src="${s.cover}" alt=""><div class="result-info"><div class="result-name">${s.name}</div><div class="result-artist">${s.artist}</div></div>`;
-        div.onclick = () => { loadSong({ name: s.name, artist: s.artist, album: s.album, cover: s.cover, songId: s.id }); closeSearch(); };
+        const addId = 'add-' + s.id;
+        div.innerHTML = `<img class="result-cover" src="${s.cover}" alt=""><div class="result-info"><div class="result-name">${s.name}</div><div class="result-artist">${s.artist}</div></div><button class="result-add" id="${addId}">+Queue</button>`;
+        div.querySelector('.result-info').onclick = () => { loadSong(songObj, true); closeSearch(); };
+        div.querySelector('.result-add').onclick = (e) => { e.stopPropagation(); addToQueue(songObj); e.target.classList.add('added'); e.target.textContent = 'Added'; };
         el.appendChild(div);
       });
     })
     .catch(() => { document.getElementById('searchBtn').textContent = 'Go'; });
 }
 
+// Queue view
+function openQueue() {
+  document.getElementById('queueOverlay').classList.add('open');
+  renderQueue();
+}
+function closeQueue() {
+  document.getElementById('queueOverlay').classList.remove('open');
+}
+function renderQueue() {
+  const el = document.getElementById('queueList');
+  el.innerHTML = '';
+  if (queue.length === 0) {
+    el.innerHTML = '<div class="queue-empty">Queue is empty. Search and add songs, or turn on Roam.</div>';
+    return;
+  }
+  queue.forEach((s, i) => {
+    const div = document.createElement('div');
+    div.className = 'queue-item';
+    div.innerHTML = `<img class="result-cover" src="${s.cover}" alt=""><div class="result-info"><div class="result-name">${s.name}</div><div class="result-artist">${s.artist}</div></div><button class="queue-rm">&times;</button>`;
+    div.querySelector('.result-info').onclick = () => {
+      queue.splice(0, i + 1);
+      saveQueue();
+      loadSong(s, true);
+      closeQueue();
+    };
+    div.querySelector('.queue-rm').onclick = () => { queue.splice(i, 1); saveQueue(); updateUI(); renderQueue(); };
+    el.appendChild(div);
+  });
+}
+
 // Remote play polling
 setInterval(() => {
   fetch('/api/remote').then(r => r.json()).then(d => {
     if (d.ok && d.song) {
-      loadSong(d.song);
+      loadSong(d.song, false);
       audio.addEventListener('canplay', () => { audio.play().catch(() => {}); playing = true; updateUI(); }, { once: true });
     }
   }).catch(() => {});
 }, 3000);
 
+// Progress bar seek
+document.getElementById('progressBar').addEventListener('click', (e) => {
+  if (!audio.duration) return;
+  const rect = e.target.getBoundingClientRect();
+  const ratio = (e.clientX - rect.left) / rect.width;
+  audio.currentTime = ratio * audio.duration;
+});
+
 // Init
-if (song) {
-  updateUI();
-  if (song.songId) {
-    fetch('/api/url?id=' + song.songId)
-      .then(r => r.json())
-      .then(d => { if (d.ok && d.url) { audio.src = d.url; audio.load(); } });
-  }
+updateUI();
+if (song && song.songId) {
+  fetch('/api/url?id=' + song.songId)
+    .then(r => r.json())
+    .then(d => { if (d.ok && d.url) { audio.src = d.url; audio.load(); } });
 }
 </script>
 </body>
