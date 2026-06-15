@@ -8,6 +8,9 @@ Built at midnight because someone wanted to hear a song.
 
 - **Search** — NetEase Cloud Music catalog
 - **Full playback** — Uses your own MUSIC_U cookie for VIP-quality streams
+- **Synced lyrics** — Real-time scrolling lyrics with tap-to-seek
+- **Shared playlist** — Server-side playlist, add/remove from any device
+- **Roam mode** — Auto-play similar songs when the current one ends
 - **Server-side caching** — Songs are downloaded once and served locally
 - **CDN fallback** — Automatically switches CDN nodes when blocked (overseas servers)
 - **Remote play** — Push a song to the player from any device via API
@@ -53,6 +56,11 @@ The player polls every 3 seconds and auto-plays the pushed song.
 |---|---|---|
 | `/api/search?q=keyword` | GET | Search songs |
 | `/api/url?id=songId` | GET | Cache and get playback URL |
+| `/api/lyric?id=songId` | GET | Get synced LRC lyrics |
+| `/api/similar?id=songId` | GET | Find similar songs |
+| `/api/playlist` | GET | Get shared playlist |
+| `/api/playlist/add` | POST | Add song to playlist |
+| `/api/playlist/remove` | POST | Remove song from playlist |
 | `/api/file/{id}.mp3` | GET | Serve cached audio |
 | `/api/remote` | GET | Poll for remote play command |
 | `/api/remote` | POST | Push a song to the player |

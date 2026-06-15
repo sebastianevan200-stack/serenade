@@ -81,6 +81,10 @@ class Handler(SimpleHTTPRequestHandler):
             return self._remote_get()
         if path == "/api/similar":
             return self._similar()
+        if path == "/api/lyric":
+            return self._lyric()
+        if path == "/api/playlist":
+            return self._playlist_get()
         if path.startswith("/api/file/"):
             return self._serve_cached(path)
 
@@ -91,6 +95,10 @@ class Handler(SimpleHTTPRequestHandler):
         path = urlparse(self.path).path
         if path == "/api/remote":
             return self._remote_set()
+        if path == "/api/playlist/add":
+            return self._playlist_add()
+        if path == "/api/playlist/remove":
+            return self._playlist_remove()
         self._json(404, {"error": "not found"})
 
     def _search(self):
@@ -208,6 +216,61 @@ class Handler(SimpleHTTPRequestHandler):
             self._json(200, {"ok": True, "songs": songs})
         except Exception as e:
             self._json(500, {"ok": False, "error": str(e)})
+
+    def _lyric(self):
+        qs = parse_qs(urlparse(self.path).query)
+        song_id = qs.get("id", [""])[0]
+        if not song_id:
+            return self._json(400, {"error": "missing id"})
+        try:
+            raw = _netease_req(
+                f"https://music.163.com/api/song/lyric?id={song_id}&lv=1&tv=-1"
+            )
+            lrc = raw.get("lrc", {}).get("lyric", "")
+            tlyric = raw.get("tlyric", {}).get("lyric", "")
+            self._json(200, {"ok": True, "lrc": lrc, "tlyric": tlyric})
+        except Exception as e:
+            self._json(500, {"ok": False, "error": str(e)})
+
+    def _playlist_path(self):
+        return HERE / "playlist.json"
+
+    def _load_playlist(self):
+        p = self._playlist_path()
+        if p.exists():
+            try: return json.loads(p.read_text())
+            except: pass
+        return []
+
+    def _save_playlist(self, songs):
+        self._playlist_path().write_text(json.dumps(songs, ensure_ascii=False))
+
+    def _playlist_get(self):
+        self._json(200, {"ok": True, "songs": self._load_playlist()})
+
+    def _playlist_add(self):
+        length = int(self.headers.get("Content-Length", 0))
+        body = json.loads(self.rfile.read(length)) if length else {}
+        song = body.get("song")
+        if not song or not song.get("songId"):
+            return self._json(400, {"error": "missing song"})
+        playlist = self._load_playlist()
+        if any(s.get("songId") == song["songId"] for s in playlist):
+            return self._json(200, {"ok": True, "duplicate": True, "songs": playlist})
+        song["addedBy"] = body.get("by", "unknown")
+        playlist.append(song)
+        self._save_playlist(playlist)
+        self._json(200, {"ok": True, "songs": playlist})
+
+    def _playlist_remove(self):
+        length = int(self.headers.get("Content-Length", 0))
+        body = json.loads(self.rfile.read(length)) if length else {}
+        song_id = body.get("songId")
+        if not song_id:
+            return self._json(400, {"error": "missing songId"})
+        playlist = [s for s in self._load_playlist() if s.get("songId") != song_id]
+        self._save_playlist(playlist)
+        self._json(200, {"ok": True, "songs": playlist})
 
     def _serve_cached(self, path: str):
         filename = path.split("/")[-1]
